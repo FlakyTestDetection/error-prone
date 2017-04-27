@@ -187,6 +187,7 @@ import com.google.errorprone.bugpatterns.android.MislabeledAndroidString;
 import com.google.errorprone.bugpatterns.android.RectIntersectReturnValueIgnored;
 import com.google.errorprone.bugpatterns.android.StaticOrDefaultInterfaceMethod;
 import com.google.errorprone.bugpatterns.argumentselectiondefects.ArgumentSelectionDefectChecker;
+import com.google.errorprone.bugpatterns.argumentselectiondefects.AssertEqualsArgumentOrderChecker;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.CollectionIncompatibleType;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.CompatibleWithMisuse;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.IncompatibleArgumentType;
@@ -204,7 +205,7 @@ import com.google.errorprone.bugpatterns.inject.MoreThanOneInjectableConstructor
 import com.google.errorprone.bugpatterns.inject.MoreThanOneQualifier;
 import com.google.errorprone.bugpatterns.inject.MoreThanOneScopeAnnotationOnClass;
 import com.google.errorprone.bugpatterns.inject.OverlappingQualifierAndScopeAnnotation;
-import com.google.errorprone.bugpatterns.inject.QualifierOnMethodWithoutProvides;
+import com.google.errorprone.bugpatterns.inject.QualifierOrScopeOnInjectMethod;
 import com.google.errorprone.bugpatterns.inject.QualifierWithTypeUse;
 import com.google.errorprone.bugpatterns.inject.ScopeAnnotationOnInterfaceOrAbstractClass;
 import com.google.errorprone.bugpatterns.inject.ScopeOrQualifierAnnotationRetention;
@@ -432,6 +433,7 @@ public class BuiltInCheckerSuppliers {
   public static final ImmutableSet<BugCheckerInfo> DISABLED_CHECKS =
       getSuppliers(
           AutoFactoryAtInject.class,
+          AssertEqualsArgumentOrderChecker.class,
           AssertFalse.class,
           AssistedInjectAndInjectOnConstructors.class,
           AssistedInjectAndInjectOnSameConstructor.class,
@@ -472,7 +474,7 @@ public class BuiltInCheckerSuppliers {
           PrivateConstructorForUtilityClass.class,
           PrivateConstructorForNoninstantiableModule.class,
           ProtoStringFieldReferenceEquality.class,
-          QualifierOnMethodWithoutProvides.class,
+          QualifierOrScopeOnInjectMethod.class,
           QualifierWithTypeUse.class,
           RedundantThrows.class,
           RemoveUnusedImports.class,

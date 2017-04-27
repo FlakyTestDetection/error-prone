@@ -22,10 +22,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.errorprone.RefactoringCollection.RefactoringResult;
 import com.google.errorprone.scanner.ErrorProneScannerTransformer;
 import com.google.errorprone.scanner.ScannerSupplier;
+import com.sun.source.util.TaskEvent;
+import com.sun.source.util.TaskEvent.Kind;
+import com.sun.source.util.TaskListener;
 import com.sun.tools.javac.api.JavacTaskImpl;
 import com.sun.tools.javac.api.JavacTool;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.JavacMessages;
+import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.util.Log.WriterKind;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -37,8 +42,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.Set;
-import javax.annotation.Nullable;
-import javax.annotation.processing.Processor;
 import javax.lang.model.SourceVersion;
 import javax.tools.DiagnosticListener;
 import javax.tools.JavaCompiler;
@@ -81,24 +84,12 @@ public class BaseErrorProneJavaCompiler implements JavaCompiler {
     setupMessageBundle(task.getContext());
     RefactoringCollection[] refactoringCollection = {null};
     task.addTaskListener(
-        createAnalyzer(errorProneOptions, task.getContext(), refactoringCollection));
-    return new CompilationTask() {
-      @Override
-      public void setProcessors(Iterable<? extends Processor> processors) {
-        task.setProcessors(processors);
-      }
-
-      @Override
-      public void setLocale(Locale locale) {
-        task.setLocale(locale);
-      }
-
-      @Override
-      public Boolean call() {
-        return wrapPotentialRefactoringCall(
-            task.call(), new PrintWriter(out, true), refactoringCollection[0]);
-      }
-    };
+        createAnalyzer(
+            scannerSupplier, errorProneOptions, task.getContext(), refactoringCollection));
+    if (refactoringCollection[0] != null) {
+      task.addTaskListener(new RefactoringTask(task.getContext(), refactoringCollection[0]));
+    }
+    return task;
   }
 
   @Override
@@ -196,8 +187,11 @@ public class BaseErrorProneJavaCompiler implements JavaCompiler {
     JavacMessages.instance(context).add(l -> bundle);
   }
 
-  private ErrorProneAnalyzer createAnalyzer(
-      ErrorProneOptions epOptions, Context context, RefactoringCollection[] refactoringCollection) {
+  static ErrorProneAnalyzer createAnalyzer(
+      ScannerSupplier scannerSupplier,
+      ErrorProneOptions epOptions,
+      Context context,
+      RefactoringCollection[] refactoringCollection) {
     if (!epOptions.patchingOptions().doRefactor()) {
       return ErrorProneAnalyzer.createByScanningForPlugins(scannerSupplier, epOptions, context);
     }
@@ -224,26 +218,38 @@ public class BaseErrorProneJavaCompiler implements JavaCompiler {
         codeTransformer, epOptions, context, refactoringCollection[0]);
   }
 
-  private static boolean wrapPotentialRefactoringCall(
-      boolean original,
-      PrintWriter errOutput,
-      @Nullable RefactoringCollection refactoringCollection) {
-    if (refactoringCollection == null) {
-      return original;
+  static class RefactoringTask implements TaskListener {
+
+    private final Context context;
+    private final RefactoringCollection refactoringCollection;
+
+    public RefactoringTask(Context context, RefactoringCollection refactoringCollection) {
+      this.context = context;
+      this.refactoringCollection = refactoringCollection;
     }
 
-    // Attempt the refactor
-    try {
-      RefactoringResult refactoringResult = refactoringCollection.applyChanges();
-      if (refactoringResult.type() == RefactoringCollection.RefactoringResultType.CHANGED) {
-        errOutput.println(refactoringResult.message());
-        errOutput.flush();
+    @Override
+    public void started(TaskEvent event) {}
+
+    @Override
+    public void finished(TaskEvent event) {
+      if (event.getKind() != Kind.GENERATE) {
+        return;
       }
-      return original;
-    } catch (Exception e) {
-      errOutput.append(e.getMessage());
-      errOutput.flush();
-      return false;
+      RefactoringResult refactoringResult;
+      try {
+        refactoringResult = refactoringCollection.applyChanges();
+      } catch (Exception e) {
+        PrintWriter out = Log.instance(context).getWriter(WriterKind.ERROR);
+        out.append(e.getMessage());
+        out.flush();
+        return;
+      }
+      if (refactoringResult.type() == RefactoringCollection.RefactoringResultType.CHANGED) {
+        PrintWriter out = Log.instance(context).getWriter(WriterKind.NOTICE);
+        out.println(refactoringResult.message());
+        out.flush();
+      }
     }
   }
 }
