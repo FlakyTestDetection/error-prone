@@ -21,8 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.errorprone.BugCheckerInfo;
 import com.google.errorprone.bugpatterns.AmbiguousMethodReference;
-import com.google.errorprone.bugpatterns.ArgumentParameterMismatch;
-import com.google.errorprone.bugpatterns.ArgumentParameterSwap;
 import com.google.errorprone.bugpatterns.ArrayEquals;
 import com.google.errorprone.bugpatterns.ArrayHashCode;
 import com.google.errorprone.bugpatterns.ArrayToString;
@@ -96,6 +94,7 @@ import com.google.errorprone.bugpatterns.JUnitAmbiguousTestClass;
 import com.google.errorprone.bugpatterns.JUnitAssertSameCheck;
 import com.google.errorprone.bugpatterns.LiteByteStringUtf8;
 import com.google.errorprone.bugpatterns.LiteralClassName;
+import com.google.errorprone.bugpatterns.LogicalAssignment;
 import com.google.errorprone.bugpatterns.LongLiteralLowerCaseSuffix;
 import com.google.errorprone.bugpatterns.LoopConditionChecker;
 import com.google.errorprone.bugpatterns.MethodCanBeStatic;
@@ -187,6 +186,7 @@ import com.google.errorprone.bugpatterns.android.IsLoggableTagLength;
 import com.google.errorprone.bugpatterns.android.MislabeledAndroidString;
 import com.google.errorprone.bugpatterns.android.RectIntersectReturnValueIgnored;
 import com.google.errorprone.bugpatterns.android.StaticOrDefaultInterfaceMethod;
+import com.google.errorprone.bugpatterns.argumentselectiondefects.ArgumentSelectionDefectChecker;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.CollectionIncompatibleType;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.CompatibleWithMisuse;
 import com.google.errorprone.bugpatterns.collectionincompatibletype.IncompatibleArgumentType;
@@ -229,6 +229,7 @@ import com.google.errorprone.bugpatterns.threadsafety.LockMethodChecker;
 import com.google.errorprone.bugpatterns.threadsafety.StaticGuardedByInstance;
 import com.google.errorprone.bugpatterns.threadsafety.SynchronizeOnNonFinalField;
 import com.google.errorprone.bugpatterns.threadsafety.UnlockMethodChecker;
+import java.util.Arrays;
 
 /**
  * Static helper class that provides {@link ScannerSupplier}s and {@link BugChecker}s for the
@@ -237,6 +238,11 @@ import com.google.errorprone.bugpatterns.threadsafety.UnlockMethodChecker;
 public class BuiltInCheckerSuppliers {
   @SafeVarargs
   public static ImmutableSet<BugCheckerInfo> getSuppliers(Class<? extends BugChecker>... checkers) {
+    return getSuppliers(Arrays.asList(checkers));
+  }
+
+  public static ImmutableSet<BugCheckerInfo> getSuppliers(
+      Iterable<Class<? extends BugChecker>> checkers) {
     ImmutableSet.Builder<BugCheckerInfo> result = ImmutableSet.builder();
     for (Class<? extends BugChecker> checker : checkers) {
       result.add(BugCheckerInfo.create(checker));
@@ -366,6 +372,7 @@ public class BuiltInCheckerSuppliers {
   public static final ImmutableSet<BugCheckerInfo> ENABLED_WARNINGS =
       getSuppliers(
           AmbiguousMethodReference.class,
+          ArgumentSelectionDefectChecker.class,
           BadAnnotationImplementation.class,
           BadComparable.class,
           BoxedPrimitiveConstructor.class,
@@ -422,8 +429,6 @@ public class BuiltInCheckerSuppliers {
   /** A list of all checks that are off by default. */
   public static final ImmutableSet<BugCheckerInfo> DISABLED_CHECKS =
       getSuppliers(
-          ArgumentParameterMismatch.class,
-          ArgumentParameterSwap.class,
           AutoFactoryAtInject.class,
           AssertFalse.class,
           AssistedInjectAndInjectOnConstructors.class,
@@ -450,6 +455,7 @@ public class BuiltInCheckerSuppliers {
           JMockTestWithoutRunWithOrRuleAnnotation.class,
           JavaxInjectOnFinalField.class,
           LockMethodChecker.class,
+          LogicalAssignment.class, // TODO(b/35766780): make this a warning
           LongLiteralLowerCaseSuffix.class,
           MethodCanBeStatic.class,
           MissingDefault.class,

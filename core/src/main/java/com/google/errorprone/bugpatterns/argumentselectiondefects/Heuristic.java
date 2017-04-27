@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Google Inc. All Rights Reserved.
+ * Copyright 2017 Google Inc. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,22 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.errorprone.bugpatterns.testdata;
 
-/** @author yulissa@google.com (Yulissa Arroyo-Paredes) */
-public class ArgumentParameterSwapNegativeCases {
-  public String doSomething(String[] keepPath, String[] dropPath) {
-    return "wrong";
-  }
+package com.google.errorprone.bugpatterns.argumentselectiondefects;
 
-  //names are identical
-  public void doSomethingElse() {
-    String[] keepPath = {"one", "two", "three"};
-    String[] dropPath = {"one"};
-    doSomething(keepPath, dropPath);
-  }
+import com.google.errorprone.VisitorState;
+import com.sun.source.tree.Tree;
+import com.sun.tools.javac.code.Symbol.MethodSymbol;
 
-  public void doNothing() {
-    doSomething(null, new String[0]);
-  }
+/**
+ * A heuristic to apply to a suggested change. If the test method returns false then the change will
+ * be abandoned.
+ *
+ * @author andrewrice@google.com (Andrew Rice)
+ */
+interface Heuristic {
+
+  boolean isAcceptableChange(Changes changes, Tree node, MethodSymbol symbol, VisitorState state);
 }

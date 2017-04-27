@@ -16,7 +16,6 @@
 
 package com.google.errorprone.util;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.errorprone.matchers.JUnitMatchers.JUNIT4_RUN_WITH_ANNOTATION;
 import static com.sun.tools.javac.code.Scope.LookupKind.NON_RECURSIVE;
 
@@ -90,6 +89,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -324,7 +324,7 @@ public class ASTHelpers {
    */
   public static Type getResultType(ExpressionTree expressionTree) {
     Type type = ASTHelpers.getType(expressionTree);
-    return firstNonNull(type.getReturnType(), type);
+    return type == null ? null : Optional.ofNullable(type.getReturnType()).orElse(type);
   }
 
   /**
@@ -420,35 +420,6 @@ public class ASTHelpers {
     return null;
   }
 
-  /**
-   * A collection of Java whitespace characters, as defined by JLS 3.6.
-   */
-  private static final CharMatcher WHITESPACE_CHARS = CharMatcher.anyOf(" \t\f\n\r");
-
-  /**
-   * Hacky fix for poor javac 6 literal parsing.  javac 6 doesn't set the AST node start
-   * position correctly when a numeric literal is preceded by -. So we scan the source
-   * backwards starting at the provided start position, looking for whitespace, until we find
-   * the true start position.  javac 7 gets this right.
-   *
-   * @return The actual start position of the literal. May be the same as the start position
-   * given by the tree node itself.
-   */
-  public static int getActualStartPosition(JCLiteral tree, CharSequence source) {
-    // This only applies to negative numeric literals.
-    Object value = tree.getValue();
-    if ((value instanceof Number) && (((Number) value).doubleValue() < 0)) {
-      int start = tree.getStartPosition() - 1;
-      while (WHITESPACE_CHARS.matches(source.charAt(start))) {
-        start--;
-      }
-      if (source.charAt(start) == '-') {
-        return start;
-      }
-    }
-    return tree.getStartPosition();
-  }
-
   @Nullable
   public static MethodSymbol findSuperMethodInType(
       MethodSymbol methodSymbol, Type superType, Types types) {
@@ -519,7 +490,7 @@ public class ASTHelpers {
     Name annotationName = state.getName(annotationClass);
     Symbol annotationSym;
     synchronized (state.context) {
-      annotationSym = state.getSymtab().enterClass(annotationName);
+      annotationSym = state.getSymtab().enterClass(state.getSymtab().java_base, annotationName);
     }
     try {
       annotationSym.complete();
@@ -674,24 +645,14 @@ public class ASTHelpers {
     return sym == null ? null : sym.name.toString();
   }
 
-  private static <T extends Symbol> T enclosingSymbol(Symbol sym, Class<T> clazz) {
-    while (sym != null) {
-      if (clazz.isInstance(sym)) {
-        return clazz.cast(sym);
-      }
-      sym = sym.owner;
-    }
-    return null;
-  }
-
   /** Return the enclosing {@code ClassSymbol} of the given symbol, or {@code null}. */
   public static ClassSymbol enclosingClass(Symbol sym) {
-    return enclosingSymbol(sym, ClassSymbol.class);
+    return sym.owner.enclClass();
   }
 
   /** Return the enclosing {@code PackageSymbol} of the given symbol, or {@code null}. */
   public static PackageSymbol enclosingPackage(Symbol sym) {
-    return enclosingSymbol(sym, PackageSymbol.class);
+    return sym.packge();
   }
 
   /**

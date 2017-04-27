@@ -32,6 +32,7 @@ import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.util.Position.LineMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Utilities for attaching comments to relevant AST nodes
@@ -45,11 +46,17 @@ public class Comments {
    * param1 /* c1 *&#47;, /* c2 *&#47; param2)} will attach the comment c1 to {@code param1} and the
    * comment c2 to {@code param2}.
    *
-   * <p>Warning: this is expensive to compute as it involves re-tokenizing the source for this node
+   * <p>Warning: this is expensive to compute as it involves re-tokenizing the source for this node.
+   *
+   * <p>Currently this method will only tokenize the source code of the method call itself. However,
+   * the source positions in the returned {@code Comment} objects are adjusted so that they are
+   * relative to the whole file.
    */
   public static ImmutableList<Commented<ExpressionTree>> findCommentsForArguments(
       NewClassTree newClassTree, VisitorState state) {
-    return findCommentsForArguments(newClassTree, newClassTree.getArguments(), state);
+    int startPosition = ((JCTree) newClassTree).getStartPosition();
+    return findCommentsForArguments(
+        newClassTree, newClassTree.getArguments(), startPosition, state);
   }
 
   /**
@@ -58,24 +65,51 @@ public class Comments {
    * to {@code param2}.
    *
    * <p>Warning: this is expensive to compute as it involves re-tokenizing the source for this node
+   *
+   * <p>Currently this method will only tokenize the source code of the method call itself. However,
+   * the source positions in the returned {@code Comment} objects are adjusted so that they are
+   * relative to the whole file.
    */
   public static ImmutableList<Commented<ExpressionTree>> findCommentsForArguments(
       MethodInvocationTree methodInvocationTree, VisitorState state) {
+    int startPosition = state.getEndPosition(methodInvocationTree.getMethodSelect());
     return findCommentsForArguments(
-        methodInvocationTree, methodInvocationTree.getArguments(), state);
+        methodInvocationTree, methodInvocationTree.getArguments(), startPosition, state);
+  }
+
+  /**
+   * Extract the text body from a comment.
+   *
+   * <p>This currently includes asterisks that start lines in the body of block comments. Do not
+   * rely on this behaviour.
+   *
+   * <p>TODO(andrewrice) Update this method to handle block comments properly if we find the need
+   */
+  public static String getTextFromComment(Comment comment) {
+    switch (comment.getStyle()) {
+      case BLOCK:
+        return comment.getText().replaceAll("^\\s*/\\*\\s*(.*?)\\s*\\*/\\s*", "$1");
+      case LINE:
+        return comment.getText().replaceAll("^\\s*//\\s*", "");
+      default:
+        return comment.getText();
+    }
   }
 
   private static ImmutableList<Commented<ExpressionTree>> findCommentsForArguments(
-      Tree tree, List<? extends ExpressionTree> arguments, VisitorState state) {
+      Tree tree, List<? extends ExpressionTree> arguments, int startPosition, VisitorState state) {
 
     if (arguments.isEmpty()) {
       return ImmutableList.of();
     }
 
     CharSequence sourceCode = state.getSourceCode();
-    int startPosition = ((JCTree) tree).getStartPosition();
-    int endPosition = computeEndPosition(tree, sourceCode, state);
-    CharSequence source = sourceCode.subSequence(startPosition, endPosition);
+    Optional<Integer> endPosition = computeEndPosition(tree, sourceCode, state);
+    if (!endPosition.isPresent()) {
+      return ImmutableList.of();
+    }
+
+    CharSequence source = sourceCode.subSequence(startPosition, endPosition.get());
 
     // The token position of the end of the method invocation
     int invocationEnd = state.getEndPosition(tree) - startPosition;
@@ -148,24 +182,34 @@ public class Comments {
    * <p>As a heuristic we first scan for any {@code /} characters on the same line as the end of the
    * method invocation. If we don't find any then we use the end of the method invocation as the end
    * position.
+   *
+   * @return the end position of the tree or Optional.empty if we are unable to calculate it
    */
   @VisibleForTesting
-  static int computeEndPosition(
+  static Optional<Integer> computeEndPosition(
       Tree methodInvocationTree, CharSequence sourceCode, VisitorState state) {
     int invocationEnd = state.getEndPosition(methodInvocationTree);
+    if (invocationEnd == -1) {
+      return Optional.empty();
+    }
 
     // Finding a good end position is expensive so first check whether we have any comment at
     // the end of our line. If we don't then we can just use the end of the methodInvocationTree
     int nextNewLine = CharMatcher.is('\n').indexIn(sourceCode, invocationEnd);
     if (nextNewLine == -1) {
-      return invocationEnd;
+      return Optional.of(invocationEnd);
     }
 
     if (CharMatcher.is('/').matchesNoneOf(sourceCode.subSequence(invocationEnd, nextNewLine))) {
-      return invocationEnd;
+      return Optional.of(invocationEnd);
     }
 
-    return state.getEndPosition(getNextNodeOrParent(methodInvocationTree, state));
+    int nextNodeEnd = state.getEndPosition(getNextNodeOrParent(methodInvocationTree, state));
+    if (nextNodeEnd == -1) {
+      return Optional.of(invocationEnd);
+    }
+
+    return Optional.of(nextNodeEnd);
   }
 
   /**
@@ -327,15 +371,15 @@ public class Comments {
     }
 
     void addCommentToPreviousArgument(Comment c) {
-      previousCommentedResultBuilder.addComment(c, previousArgumentEndPosition);
+      previousCommentedResultBuilder.addComment(c, previousArgumentEndPosition, offset);
     }
 
     void addCommentToCurrentArgument(Comment c) {
-      currentCommentedResultBuilder.addComment(c, currentArgumentStartPosition);
+      currentCommentedResultBuilder.addComment(c, currentArgumentStartPosition, offset);
     }
 
     void addAllCommentsToCurrentArgument(Iterable<Comment> comments) {
-      currentCommentedResultBuilder.addAllComment(comments, currentArgumentStartPosition);
+      currentCommentedResultBuilder.addAllComment(comments, currentArgumentStartPosition, offset);
     }
 
     public boolean hasMoreArguments() {
